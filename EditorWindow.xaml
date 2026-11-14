@@ -1,0 +1,104 @@
+﻿<Window x:Class="ShotNova.EditorWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="ShotNova" Width="1300" Height="760" MinWidth="1150"
+        WindowStartupLocation="CenterScreen" Background="{StaticResource BgBrush}"
+        Foreground="{StaticResource TextBrush}" FontFamily="Segoe UI Variable Text, Segoe UI" FontSize="13"
+        KeyDown="Window_KeyDown">
+    <DockPanel>
+        <!-- Barra de ferramentas -->
+        <Border DockPanel.Dock="Top" Background="{StaticResource PanelBrush}" Padding="10,8"
+                BorderBrush="{StaticResource LineBrush}" BorderThickness="0,0,0,1">
+            <DockPanel LastChildFill="False">
+                <StackPanel DockPanel.Dock="Left" Orientation="Horizontal">
+                    <ToggleButton x:Name="TPen" Tag="Pen" Click="Tool_Click" ToolTip="Caneta">
+                        <StackPanel Orientation="Horizontal">
+                            <Path Style="{StaticResource Ico}" Margin="0" Width="18" Height="18" Data="M3,21 L4,16 L16,4 L20,8 L8,20 Z M14,6 L18,10"/>
+                        </StackPanel>
+                    </ToggleButton>
+                    <ToggleButton x:Name="TArrow" Tag="Arrow" Click="Tool_Click" IsChecked="True" ToolTip="Seta">
+                        <StackPanel Orientation="Horizontal">
+                            <Path Style="{StaticResource Ico}" Margin="0" Width="18" Height="18" Data="M4,20 L19,5 M10,5 L19,5 L19,14"/>
+                        </StackPanel>
+                    </ToggleButton>
+                    <ToggleButton x:Name="TRect" Tag="Rect" Click="Tool_Click" ToolTip="Caixa">
+                        <StackPanel Orientation="Horizontal">
+                            <Path Style="{StaticResource Ico}" Margin="0" Width="18" Height="18" Data="M4,6 L20,6 L20,18 L4,18 Z"/>
+                        </StackPanel>
+                    </ToggleButton>
+                    <ToggleButton x:Name="THigh" Tag="Highlight" Click="Tool_Click" ToolTip="Marca-texto">
+                        <StackPanel Orientation="Horizontal">
+                            <Path Style="{StaticResource Ico}" Margin="0" Width="18" Height="18" Data="M9,15 L17,7 L21,11 L13,19 Z M9,15 L7,21 L13,19 M3,21 L8,21"/>
+                        </StackPanel>
+                    </ToggleButton>
+                    <ToggleButton x:Name="TText" Tag="Text" Click="Tool_Click" ToolTip="Texto">
+                        <StackPanel Orientation="Horizontal">
+                            <Path Style="{StaticResource Ico}" Margin="0" Width="18" Height="18" Data="M5,6 L5,4 L19,4 L19,6 M12,4 L12,20 M9,20 L15,20"/>
+                        </StackPanel>
+                    </ToggleButton>
+
+                    <Border Style="{StaticResource Sep}"/>
+
+                    <StackPanel x:Name="Swatches" Orientation="Horizontal" VerticalAlignment="Center">
+                        <ToggleButton Style="{StaticResource Swatch}" Background="#E53935" Tag="#E53935" Click="Color_Click" IsChecked="True" ToolTip="Vermelho"/>
+                        <ToggleButton Style="{StaticResource Swatch}" Background="#FDD835" Tag="#FDD835" Click="Color_Click" ToolTip="Amarelo"/>
+                        <ToggleButton Style="{StaticResource Swatch}" Background="#43A047" Tag="#43A047" Click="Color_Click" ToolTip="Verde"/>
+                        <ToggleButton Style="{StaticResource Swatch}" Background="#1E88E5" Tag="#1E88E5" Click="Color_Click" ToolTip="Azul"/>
+                        <ToggleButton Style="{StaticResource Swatch}" Background="#111111" Tag="#111111" Click="Color_Click" ToolTip="Preto"/>
+                        <ToggleButton Style="{StaticResource Swatch}" Background="#FFFFFF" Tag="#FFFFFF" Click="Color_Click" ToolTip="Branco"/>
+                    </StackPanel>
+
+                    <TextBlock Text="Espessura" Foreground="{StaticResource SubtleBrush}" VerticalAlignment="Center" Margin="14,0,6,0"/>
+                    <Slider x:Name="Thick" Minimum="1" Maximum="14" Value="4" Width="90" VerticalAlignment="Center"/>
+                </StackPanel>
+
+                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                    <Button Click="Undo_Click" ToolTip="Desfazer (Ctrl+Z)">
+                        <StackPanel Orientation="Horizontal">
+                            <Path Style="{StaticResource Ico}" Data="M8,5 L3,10 L8,15 M3,10 L14,10 A6,6 0 0 1 14,22 L9,22"/>
+                            <TextBlock Text="Desfazer"/>
+                        </StackPanel>
+                    </Button>
+                    <Button Click="Save_Click" ToolTip="Salvar como… (Ctrl+S)">
+                        <StackPanel Orientation="Horizontal">
+                            <Path Style="{StaticResource Ico}" Data="M5,4 L16,4 L20,8 L20,20 L5,20 Z M8,4 L8,9 L15,9 L15,4 M8,20 L8,14 L17,14 L17,20"/>
+                            <TextBlock Text="Salvar"/>
+                        </StackPanel>
+                    </Button>
+                    <Button Click="History_Click" ToolTip="Guardar no histórico (Ctrl+H)">
+                        <StackPanel Orientation="Horizontal">
+                            <Path Style="{StaticResource Ico}" Data="M12,3 A9,9 0 1 0 12,21 A9,9 0 1 0 12,3 M12,7 L12,12 L16,14"/>
+                            <TextBlock Text="Histórico"/>
+                        </StackPanel>
+                    </Button>
+                    <Button Style="{StaticResource Primary}" Click="Copy_Click" ToolTip="Copiar (Ctrl+C)" Margin="8,0,2,0" Padding="14,7">
+                        <StackPanel Orientation="Horizontal">
+                            <Path Style="{StaticResource Ico}" Data="M8,8 L20,8 L20,21 L8,21 Z M16,8 L16,4 L4,4 L4,17 L8,17"/>
+                            <TextBlock Text="Copiar"/>
+                        </StackPanel>
+                    </Button>
+                </StackPanel>
+            </DockPanel>
+        </Border>
+
+        <!-- Barra de status -->
+        <Border DockPanel.Dock="Bottom" Background="{StaticResource PanelBrush}" Padding="14,5"
+                BorderBrush="{StaticResource LineBrush}" BorderThickness="0,1,0,0">
+            <TextBlock x:Name="Status" Foreground="{StaticResource SubtleBrush}" FontSize="12" Text="Pronto."/>
+        </Border>
+
+        <!-- Área da imagem -->
+        <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
+            <Border x:Name="Holder" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="28">
+                <Border.Effect>
+                    <DropShadowEffect BlurRadius="24" ShadowDepth="4" Opacity="0.55" Color="Black"/>
+                </Border.Effect>
+                <Grid x:Name="Surface" Background="White">
+                    <Image x:Name="Img" Stretch="Fill"/>
+                    <Canvas x:Name="Ink" Background="Transparent" ClipToBounds="True"
+                            MouseLeftButtonDown="Ink_Down" MouseMove="Ink_Move" MouseLeftButtonUp="Ink_Up"/>
+                </Grid>
+            </Border>
+        </ScrollViewer>
+    </DockPanel>
+</Window>
