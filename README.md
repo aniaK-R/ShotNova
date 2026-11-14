@@ -56,3 +56,7 @@ Ficam em `%APPDATA%\ShotNova\settings.json` (atalho, última pasta e contador do
 ## Planejado
 
 - Gravação de vídeo (tela inteira, uma janela ou uma área).
+
+## Licença
+
+Distribuído sob a **GNU General Public License v3.0**. Veja o arquivo [LICENSE](LICENSE).
