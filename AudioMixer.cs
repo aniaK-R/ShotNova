@@ -11,49 +11,83 @@ namespace ShotNova;
 /// <summary>
 /// Captura o som do computador (loopback do dispositivo de saída padrão) e/ou o microfone padrão,
 /// mistura tudo em PCM 16 bits, 48 kHz, estéreo, e entrega em tempo real (preenchendo silêncio).
+/// Cada fonte pode ser ligada e desligada a qualquer momento, inclusive durante a gravação;
+/// desligada, o dispositivo é realmente fechado (o indicador de microfone do Windows apaga).
 /// </summary>
 public sealed class AudioMixer : IDisposable
 {
     public const int Rate = 48000;
     public const int Channels = 2;
 
+    private sealed class Source
+    {
+        public bool Want;
+        public WasapiCapture? Capture;
+        public ISampleProvider? Input;
+    }
+
     private readonly MixingSampleProvider _mix;
-    private WasapiCapture? _system;
-    private WasapiCapture? _mic;
+    private readonly object _gate = new();
+    private readonly Source _system = new();
+    private readonly Source _mic = new();
+    private bool _running;
+    private bool _disposed;
 
-    /// <summary>Há pelo menos uma fonte de áudio funcionando.</summary>
-    public bool HasSources { get; private set; }
-
-    /// <summary>Avisos de fontes que não puderam ser abertas (ex.: sem microfone).</summary>
-    public string? Warning { get; private set; }
+    /// <summary>Chamado quando uma fonte não pôde ser aberta (qualquer thread).</summary>
+    public event Action<string>? Warn;
 
     public AudioMixer(bool systemSound, bool microphone)
     {
         _mix = new MixingSampleProvider(WaveFormat.CreateIeeeFloatWaveFormat(Rate, Channels)) { ReadFully = true };
+        _system.Want = systemSound;
+        _mic.Want = microphone;
+    }
 
-        if (systemSound)
+    public bool SystemOn { get { lock (_gate) return _system.Want; } }
+    public bool MicOn { get { lock (_gate) return _mic.Want; } }
+
+    public void SetSystem(bool on) { lock (_gate) { _system.Want = on; if (_running) Apply(_system, () => new WasapiLoopbackCapture(), "Som do computador"); } }
+    public void SetMic(bool on) { lock (_gate) { _mic.Want = on; if (_running) Apply(_mic, () => new WasapiCapture(), "Microfone"); } }
+
+    /// <summary>Abre ou fecha o dispositivo conforme o estado desejado. Chamar com _gate travado.</summary>
+    private void Apply(Source s, Func<WasapiCapture> make, string label)
+    {
+        if (_disposed || s.Want == (s.Capture is not null)) return;
+        if (!s.Want) { Close(s); return; }
+
+        WasapiCapture? c = null;
+        ISampleProvider? input = null;
+        try
         {
-            try { _system = Open(new WasapiLoopbackCapture()); HasSources = true; }
-            catch (Exception ex) { Warning += "Som do computador indisponível: " + ex.Message + " "; }
+            c = make();
+            var buffer = new BufferedWaveProvider(c.WaveFormat)
+            {
+                DiscardOnBufferOverflow = true,
+                ReadFully = true,                     // sem dados = silêncio (o loopback não envia nada quando está mudo)
+                BufferDuration = TimeSpan.FromSeconds(2)
+            };
+            c.DataAvailable += (_, e) => { try { buffer.AddSamples(e.Buffer, 0, e.BytesRecorded); } catch { } };
+            input = ToMixFormat(buffer);
+            _mix.AddMixerInput(input);
+            c.StartRecording();
+            s.Capture = c;
+            s.Input = input;
         }
-        if (microphone)
+        catch (Exception ex)
         {
-            try { _mic = Open(new WasapiCapture()); HasSources = true; }
-            catch (Exception ex) { Warning += "Microfone indisponível: " + ex.Message + " "; }
+            if (input is not null) _mix.RemoveMixerInput(input);
+            try { c?.Dispose(); } catch { }
+            s.Want = false;
+            Warn?.Invoke($"{label} indisponível: {ex.Message}");
         }
     }
 
-    private WasapiCapture Open(WasapiCapture capture)
+    private void Close(Source s)
     {
-        var buffer = new BufferedWaveProvider(capture.WaveFormat)
-        {
-            DiscardOnBufferOverflow = true,
-            ReadFully = true,                       // sem dados = silêncio (o loopback não envia nada quando está mudo)
-            BufferDuration = TimeSpan.FromSeconds(2)
-        };
-        capture.DataAvailable += (_, e) => buffer.AddSamples(e.Buffer, 0, e.BytesRecorded);
-        _mix.AddMixerInput(ToMixFormat(buffer));
-        return capture;
+        try { s.Capture?.StopRecording(); } catch { }
+        try { s.Capture?.Dispose(); } catch { }
+        s.Capture = null;
+        if (s.Input is not null) { _mix.RemoveMixerInput(s.Input); s.Input = null; }
     }
 
     private static ISampleProvider ToMixFormat(IWaveProvider source)
@@ -76,8 +110,12 @@ public sealed class AudioMixer : IDisposable
     /// </summary>
     public void Pump(Stream output, Stopwatch clock, Func<bool> stop)
     {
-        _system?.StartRecording();
-        _mic?.StartRecording();
+        lock (_gate)
+        {
+            _running = true;
+            Apply(_system, () => new WasapiLoopbackCapture(), "Som do computador");
+            Apply(_mic, () => new WasapiCapture(), "Microfone");
+        }
 
         long frames = 0;
         while (!stop())
@@ -105,9 +143,11 @@ public sealed class AudioMixer : IDisposable
 
     public void Dispose()
     {
-        try { _system?.StopRecording(); } catch { }
-        try { _mic?.StopRecording(); } catch { }
-        _system?.Dispose();
-        _mic?.Dispose();
+        lock (_gate)
+        {
+            _disposed = true;
+            Close(_system);
+            Close(_mic);
+        }
     }
 }

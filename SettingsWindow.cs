@@ -21,6 +21,8 @@ public sealed class SettingsWindow : Window
     };
     private readonly TextBlock _msg = new() { Margin = new Thickness(0, 8, 0, 0), TextWrapping = TextWrapping.Wrap };
     private readonly Func<uint, uint, string?> _apply;
+    private readonly CheckBox _chkSystem = new() { Content = "Gravar o som do computador", Margin = new Thickness(0, 0, 0, 6) };
+    private readonly CheckBox _chkMic = new() { Content = "Gravar o microfone" };
 
     private uint _mods;
     private uint _vk;
@@ -32,8 +34,7 @@ public sealed class SettingsWindow : Window
         _mods = current.HotkeyModifiers;
         _vk = current.HotkeyVk;
 
-        Title = "ShotNova - Configurações";
-        Background = (Brush)System.Windows.Application.Current.Resources["BgBrush"];
+        Title = "ShotNova - Configurações";        Background = (Brush)System.Windows.Application.Current.Resources["BgBrush"];
         Foreground = (Brush)System.Windows.Application.Current.Resources["TextBrush"];
         FontFamily = new FontFamily("Segoe UI Variable Text, Segoe UI");
         FontSize = 13;
@@ -66,8 +67,28 @@ public sealed class SettingsWindow : Window
         panel.Children.Add(_box);
         panel.Children.Add(_msg);
 
+        panel.Children.Add(new Border { Height = 1, Margin = new Thickness(0, 16, 0, 14), Background = (Brush)System.Windows.Application.Current.Resources["LineBrush"] });
+        panel.Children.Add(new TextBlock
+        {
+            Text = "Gravação de vídeo",
+            FontSize = 15,
+            FontWeight = FontWeights.SemiBold,
+            Margin = new Thickness(0, 0, 0, 4)
+        });
+        panel.Children.Add(new TextBlock
+        {
+            Text = "Áudio já ligado ao iniciar uma gravação. Durante a gravação dá para ligar ou desligar cada um pela barra de controle.",
+            TextWrapping = TextWrapping.Wrap,
+            Margin = new Thickness(0, 0, 0, 10),
+            Foreground = (Brush)System.Windows.Application.Current.Resources["SubtleBrush"]
+        });
+        _chkSystem.IsChecked = current.RecordSystemAudio;
+        _chkMic.IsChecked = current.RecordMic;
+        panel.Children.Add(_chkSystem);
+        panel.Children.Add(_chkMic);
+
         var buttons = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(0, 16, 0, 0) };
-        var def = new Button { Content = "Padrão (PrintScreen)", Padding = new Thickness(10, 4, 10, 4), Margin = new Thickness(0, 0, 8, 0) };
+        var def = new Button { Content = "Atalho padrão", Padding = new Thickness(10, 4, 10, 4), Margin = new Thickness(0, 0, 8, 0) };
         var save = new Button
         {
             Content = "Salvar",
@@ -138,12 +159,26 @@ public sealed class SettingsWindow : Window
     private void Save()
     {
         var error = _apply(_mods, _vk);
-        if (error is null)
+        if (error is not null)
         {
-            Close();
+            _msg.Foreground = Brushes.Firebrick;
+            _msg.Text = error;
             return;
         }
-        _msg.Foreground = Brushes.Firebrick;
-        _msg.Text = error;
+
+        try
+        {
+            var s = Settings.Load(); // relê: o atalho acabou de ser gravado pelo App
+            s.RecordSystemAudio = _chkSystem.IsChecked == true;
+            s.RecordMic = _chkMic.IsChecked == true;
+            s.Save();
+        }
+        catch (Exception ex)
+        {
+            _msg.Foreground = Brushes.Firebrick;
+            _msg.Text = "Não foi possível salvar as opções de áudio: " + ex.Message;
+            return;
+        }
+        Close();
     }
 }

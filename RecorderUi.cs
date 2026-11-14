@@ -2,6 +2,7 @@ using System;
 using System.Drawing;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Threading;
@@ -30,7 +31,35 @@ public sealed class RecorderUi : IDisposable
 
     public event Action? StopRequested;
 
-    public RecorderUi(Func<Rectangle> region)
+    private static ToggleButton AudioToggle(string iconData, string name, bool on, Action<bool> set)
+    {
+        var b = new ToggleButton
+        {
+            Content = new Shapes.Path
+            {
+                Style = (Style)System.Windows.Application.Current.Resources["Ico"],
+                Data = Geometry.Parse(iconData),
+                Margin = new Thickness(0),
+                Width = 16,
+                Height = 16
+            },
+            IsChecked = on,
+            Padding = new Thickness(8, 5, 8, 5),
+            Margin = new Thickness(2, 0, 0, 0),
+            Opacity = on ? 1 : 0.55
+        };
+        b.ToolTip = $"{name}: {(on ? "ligado" : "desligado")} (clique para alternar)";
+        b.Click += (_, _) =>
+        {
+            var v = b.IsChecked == true;
+            set(v);
+            b.Opacity = v ? 1 : 0.55;
+            b.ToolTip = $"{name}: {(v ? "ligado" : "desligado")} (clique para alternar)";
+        };
+        return b;
+    }
+
+    public RecorderUi(Func<Rectangle> region, AudioMixer? audio = null)
     {
         _region = region;
 
@@ -46,6 +75,13 @@ public sealed class RecorderUi : IDisposable
         var row = new StackPanel { Orientation = Orientation.Horizontal };
         row.Children.Add(_dot);
         row.Children.Add(_time);
+        if (audio is not null)
+        {
+            row.Children.Add(AudioToggle("M4,9 L8,9 L12,5 L12,19 L8,15 L4,15 Z M16,9 A4,4 0 0 1 16,15 M18.5,6.5 A8,8 0 0 1 18.5,17.5",
+                "Som do computador", audio.SystemOn, audio.SetSystem));
+            row.Children.Add(AudioToggle("M12,3 A3,3 0 0 1 15,6 L15,12 A3,3 0 0 1 9,12 L9,6 A3,3 0 0 1 12,3 Z M6,11 A6,6 0 0 0 18,11 M12,17 L12,21 M9,21 L15,21",
+                "Microfone", audio.MicOn, audio.SetMic));
+        }
         row.Children.Add(stop);
 
         _pill = new Window

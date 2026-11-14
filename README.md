@@ -21,7 +21,7 @@ Capturador de tela leve para Windows 10/11, no estilo do Lightshot: a tela conge
 - MP4 (H.264, 30 fps) com o cursor do mouse, salvo em `Vídeos\ShotNova\video_1.mp4`, `video_2.mp4`, …
 - Durante a gravação aparece uma moldura vermelha e uma barra com cronômetro e botão **Parar**; as duas ficam fora do vídeo.
 - O mesmo atalho de captura também **para** a gravação.
-- **Áudio**: som do computador (ligado por padrão) e microfone (desligado por padrão), mixados na mesma faixa. Escolha em *Áudio da gravação* no menu da bandeja. Usa o dispositivo de som e o microfone padrão do Windows.
+- **Áudio**: som do computador e microfone, mixados na mesma faixa. O padrão (ligado ou desligado) fica em **Configurações**. Durante a gravação, a barra de controle tem botões para ligar e desligar cada um a qualquer momento; desligado, o dispositivo é realmente fechado. Usa o dispositivo de som e o microfone padrão do Windows. A faixa de áudio existe em todo vídeo (silêncio quando tudo está desligado).
 
 **Geral**
 
@@ -31,7 +31,7 @@ Capturador de tela leve para Windows 10/11, no estilo do Lightshot: a tela conge
 ## Instalação
 
 1. Instale o **.NET Desktop Runtime 10** (x64): <https://dotnet.microsoft.com/download/dotnet/10.0>
-2. Baixe e execute `ShotNova-Setup-0.3.0.exe` (instalação por usuário, não pede administrador).
+2. Baixe e execute `ShotNova-Setup-0.4.0.exe` (instalação por usuário, não pede administrador).
 3. Para gravar vídeo é preciso o **ffmpeg**. Na primeira gravação o ShotNova oferece instalar pelo winget (`winget install Gyan.FFmpeg`). Também funciona com o `ffmpeg.exe` ao lado do `ShotNova.exe` ou no `PATH`.
 
 O ffmpeg é usado como programa separado, só para codificar o vídeo; ele não vem dentro do ShotNova.
@@ -48,7 +48,7 @@ No Windows 11, as entradas do menu de contexto aparecem em **Mostrar mais opçõ
 | Desfazer anotação | `Ctrl+Z` |
 | Cancelar | `Esc` |
 | Desfazer a seleção | botão direito |
-| Gravar vídeo da área selecionada | botão ● da barra |
+| Gravar vídeo | botões da barra: tela inteira, janela ou a área selecionada (●) |
 
 ## Compilar
 
@@ -67,7 +67,7 @@ powershell -File tools\make-icon.ps1
 
 ## Configurações
 
-Ficam em `%APPDATA%\ShotNova\settings.json` (atalho, última pasta e contadores de `screenshot_N` e `video_N`).
+Abra **Configurações** no menu da bandeja para escolher o atalho de captura e o áudio padrão das gravações (som do computador e microfone). Tudo fica em `%APPDATA%\ShotNova\settings.json`, junto com a última pasta usada e os contadores de `screenshot_N` e `video_N`.
 
 
 ## Licença

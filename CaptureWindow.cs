@@ -81,6 +81,12 @@ public sealed class CaptureWindow : Window
     /// <summary>Pedido para gravar vídeo da área selecionada (retângulo em coordenadas de tela, pixels físicos).</summary>
     public event Action<System.Drawing.Rectangle>? RecordRequested;
 
+    /// <summary>Pedido para gravar o monitor inteiro (retângulo do monitor, em pixels físicos).</summary>
+    public event Action<System.Drawing.Rectangle>? RecordScreenRequested;
+
+    /// <summary>Pedido para escolher uma janela e gravá-la.</summary>
+    public event Action? RecordWindowRequested;
+
     private readonly bool _recordFirst;
 
     public CaptureWindow(BitmapSource shot, System.Drawing.Rectangle virtualScreen, bool recordFirst = false)
@@ -221,7 +227,10 @@ public sealed class CaptureWindow : Window
         _ui.Children.Add(_tools);
 
         var h = new StackPanel { Orientation = Orientation.Horizontal };
+        h.Children.Add(ActionButton("M3,5 L21,5 L21,16 L3,16 Z M9,20 L15,20 M12,16 L12,20", "Gravar a tela inteira (monitor da seleção)", DoRecordScreen));
+        h.Children.Add(ActionButton("M3,5 L21,5 L21,19 L3,19 Z M3,9 L21,9 M6,7 L6.1,7", "Gravar uma janela (escolher com o mouse)", DoRecordWindow));
         h.Children.Add(ActionButton("M12,4 A8,8 0 1 0 12,20 A8,8 0 1 0 12,4 M12,9 A3,3 0 1 0 12,15 A3,3 0 1 0 12,9", "Gravar vídeo desta área", DoRecord, primary: _recordFirst));
+        h.Children.Add(new Border { Width = 1, Margin = new Thickness(4, 6, 4, 6), Background = Brush_("LineBrush") });
         h.Children.Add(ActionButton("M12,3 A9,9 0 1 0 12,21 A9,9 0 1 0 12,3 M12,7 L12,12 L16,14", "Guardar no histórico (Ctrl+H)", DoHistory));
         h.Children.Add(ActionButton("M5,4 L16,4 L20,8 L20,20 L5,20 Z M8,4 L8,9 L15,9 L15,4 M8,20 L8,14 L17,14 L17,20", "Salvar como… (Ctrl+S)", DoSave));
         h.Children.Add(ActionButton("M8,8 L20,8 L20,21 L8,21 Z M16,8 L16,4 L4,4 L4,17 L8,17", "Copiar (Ctrl+C ou Enter)", DoCopy, primary: true));
@@ -820,6 +829,22 @@ public sealed class CaptureWindow : Window
         var rect = new System.Drawing.Rectangle(_vs.X + x, _vs.Y + y, w, hgt);
         Close();
         RecordRequested?.Invoke(rect);
+    }
+
+    private void DoRecordScreen()
+    {
+        if (!_hasSel) return;
+        var sel = new System.Drawing.Rectangle(_vs.X + (int)Math.Round(_sel.X), _vs.Y + (int)Math.Round(_sel.Y),
+            Math.Max(1, (int)Math.Round(_sel.Width)), Math.Max(1, (int)Math.Round(_sel.Height)));
+        var monitor = System.Windows.Forms.Screen.FromRectangle(sel).Bounds;
+        Close();
+        RecordScreenRequested?.Invoke(monitor);
+    }
+
+    private void DoRecordWindow()
+    {
+        Close();
+        RecordWindowRequested?.Invoke();
     }
 
     private void DoHistory()

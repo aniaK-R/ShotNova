@@ -142,7 +142,7 @@ public partial class App : System.Windows.Application
     private void OpenSettings()
     {
         if (_settingsWindow is not null) { _settingsWindow.Activate(); return; }
-        _settingsWindow = new SettingsWindow(_settings, ApplyHotkey);
+        _settingsWindow = new SettingsWindow(Settings.Load(), ApplyHotkey);
         _settingsWindow.Closed += (_, _) => _settingsWindow = null;
         _settingsWindow.Show();
     }
@@ -160,28 +160,12 @@ public partial class App : System.Windows.Application
         _recItems.Add(menu.Items.Add("Gravar área…", null, (_, _) => Dispatcher.BeginInvoke(new Action(RecordArea))));
         _stopItem = menu.Items.Add("■ Parar gravação", null, (_, _) => Dispatcher.BeginInvoke(new Action(StopRecording)));
         _stopItem.Visible = false;
-
-        var audioMenu = new Forms.ToolStripMenuItem("Áudio da gravação");
-        var sysItem = new Forms.ToolStripMenuItem("Som do computador") { CheckOnClick = true };
-        var micItem = new Forms.ToolStripMenuItem("Microfone") { CheckOnClick = true };
-        sysItem.Click += (_, _) => { var s = Settings.Load(); s.RecordSystemAudio = sysItem.Checked; s.Save(); };
-        micItem.Click += (_, _) => { var s = Settings.Load(); s.RecordMic = micItem.Checked; s.Save(); };
-        audioMenu.DropDownItems.Add(sysItem);
-        audioMenu.DropDownItems.Add(micItem);
-        menu.Items.Add(audioMenu);
-        _recItems.Add(audioMenu);
-        menu.Opening += (_, _) =>
-        {
-            var s = Settings.Load();
-            sysItem.Checked = s.RecordSystemAudio;
-            micItem.Checked = s.RecordMic;
-        };
         menu.Items.Add(new Forms.ToolStripSeparator());
         menu.Items.Add("Abrir pasta de capturas", null, (_, _) => OpenFolder(Paths.Captures));
         menu.Items.Add("Abrir pasta do histórico", null, (_, _) => OpenFolder(Paths.History));
         menu.Items.Add("Abrir pasta de vídeos", null, (_, _) => OpenFolder(Paths.Videos));
         menu.Items.Add(new Forms.ToolStripSeparator());
-        menu.Items.Add("Configurações (atalho)…", null, (_, _) => Dispatcher.BeginInvoke(new Action(OpenSettings)));
+        menu.Items.Add("Configurações…", null, (_, _) => Dispatcher.BeginInvoke(new Action(OpenSettings)));
         var shellItem = new Forms.ToolStripMenuItem("Integrar ao menu de contexto do Windows") { CheckOnClick = false };
         shellItem.Click += (_, _) => ToggleShellIntegration();
         menu.Items.Add(shellItem);
@@ -286,6 +270,12 @@ public partial class App : System.Windows.Application
                 await Task.Delay(500); // deixa o overlay sumir antes de começar
                 BeginRecording(() => rect, rect);
             };
+            win.RecordScreenRequested += async monitor =>
+            {
+                await Task.Delay(500);
+                BeginRecording(() => monitor, monitor);
+            };
+            win.RecordWindowRequested += () => Dispatcher.BeginInvoke(new Action(RecordWindow));
             win.Closed += (_, _) => _capturing = false;
             win.Show();
         }
@@ -348,14 +338,10 @@ public partial class App : System.Windows.Application
         Directory.CreateDirectory(Paths.Videos);
         var path = Path.Combine(Paths.Videos, st.NextVideoName(Paths.Videos));
 
-        AudioMixer? audio = null;
-        if (st.RecordSystemAudio || st.RecordMic)
-        {
-            audio = new AudioMixer(st.RecordSystemAudio, st.RecordMic);
-            if (audio.Warning is not null)
-                _tray?.ShowBalloonTip(4000, "ShotNova", audio.Warning.Trim(), Forms.ToolTipIcon.Warning);
-            if (!audio.HasSources) { audio.Dispose(); audio = null; } // grava só o vídeo
-        }
+        // a faixa de áudio sempre existe (fica em silêncio se tudo estiver desligado), para dar para ligar durante a gravação
+        var audio = new AudioMixer(st.RecordSystemAudio, st.RecordMic);
+        audio.Warn += msg => Dispatcher.BeginInvoke(new Action(() =>
+            _tray?.ShowBalloonTip(4000, "ShotNova", msg, Forms.ToolTipIcon.Warning)));
 
         var rec = new ScreenRecorder(region, new Drawing.Size(w, h), path, audio);
         try
@@ -364,13 +350,13 @@ public partial class App : System.Windows.Application
         }
         catch (Exception ex)
         {
-            audio?.Dispose();
+            audio.Dispose();
             _tray?.ShowBalloonTip(4000, "ShotNova", "Não foi possível iniciar a gravação: " + ex.Message, Forms.ToolTipIcon.Error);
             return;
         }
 
         _rec = rec;
-        _recUi = new RecorderUi(region);
+        _recUi = new RecorderUi(region, audio);
         _recUi.StopRequested += StopRecording;
         UpdateTrayText();
     }

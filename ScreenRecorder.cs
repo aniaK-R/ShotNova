@@ -89,7 +89,7 @@ public sealed class ScreenRecorder
             "-framerate", Fps.ToString(), "-i", "-"
         };
 
-        var withAudio = _audio is { HasSources: true };
+        var withAudio = _audio is not null; // a faixa existe sempre (silêncio se tudo estiver desligado), para poder ligar durante a gravação
         if (withAudio)
         {
             var name = "shotnova_audio_" + Guid.NewGuid().ToString("N");
@@ -146,10 +146,12 @@ public sealed class ScreenRecorder
     {
         _stop = true;
         _thread?.Join(5000);
-        _audioThread?.Join(3000);
-        try { _pipe?.Dispose(); } catch { }   // fecha o canal: o ffmpeg vê o fim do áudio
-        try { _audio?.Dispose(); } catch { }
+        // A ORDEM IMPORTA: o ffmpeg só volta a ler o áudio depois que a entrada de vídeo acaba.
+        // 1) fecha o vídeo; 2) o áudio termina de enviar o que falta (o Flush espera o ffmpeg ler); 3) fecha o áudio.
         try { _ff?.StandardInput.Close(); } catch { }
+        _audioThread?.Join(5000);
+        try { _pipe?.Dispose(); } catch { }
+        try { _audio?.Dispose(); } catch { }
         if (_ff is not null && !_ff.WaitForExit(30000))
         {
             try { _ff.Kill(); } catch { }
