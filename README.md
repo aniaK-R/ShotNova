@@ -1,10 +1,12 @@
 # ShotNova
 
-Capturador de tela leve para Windows 10/11, no estilo do Lightshot: a tela congela, você seleciona a área e edita ali mesmo, sem janela extra.
+Capturador de tela leve para Windows 10/11, no estilo do Lightshot: a tela congela, você seleciona a área e edita ali mesmo, sem janela extra. Também grava vídeo.
 
 > Projeto independente, inspirado no fluxo do Lightshot. Não usa código nem recursos do Lightshot.
 
-## Recursos (v0.1.0)
+## Recursos
+
+**Capturas**
 
 - Captura de área com **atalho global configurável** (padrão: `Print Screen`; ex.: `Ctrl+PrintScreen`).
 - Funciona com vários monitores e escalas de DPI diferentes (PerMonitorV2).
@@ -12,14 +14,27 @@ Capturador de tela leve para Windows 10/11, no estilo do Lightshot: a tela conge
 - Anotações: caneta, linha, seta, caixa, marca-texto e texto; cores, espessura e desfazer.
 - Copiar (`Enter` / `Ctrl+C`), salvar (`Ctrl+S`) ou guardar no histórico (`Ctrl+H`, só quando você escolhe).
 - "Salvar" lembra a última pasta e sugere `screenshot_1`, `screenshot_2`, …
-- Ícone na bandeja, menu de contexto do Windows (opcional) e início com o Windows (opcional).
 
-Tudo é local: nada é enviado para a internet.
+**Vídeo (novo na 0.2.0)**
+
+- Grava a **tela inteira** (monitor onde está o cursor), uma **janela** (clique para escolher; acompanha a janela se ela for movida) ou uma **área** selecionada.
+- MP4 (H.264, 30 fps) com o cursor do mouse, salvo em `Vídeos\ShotNova\video_1.mp4`, `video_2.mp4`, …
+- Durante a gravação aparece uma moldura vermelha e uma barra com cronômetro e botão **Parar**; as duas ficam fora do vídeo.
+- O mesmo atalho de captura também **para** a gravação.
+- Sem áudio por enquanto.
+
+**Geral**
+
+- Ícone na bandeja, menu de contexto do Windows (opcional) e início com o Windows (opcional).
+- Tudo é local: nada é enviado para a internet.
 
 ## Instalação
 
 1. Instale o **.NET Desktop Runtime 10** (x64): <https://dotnet.microsoft.com/download/dotnet/10.0>
-2. Baixe e execute `ShotNova-Setup-0.1.0.exe` (instalação por usuário, não pede administrador).
+2. Baixe e execute `ShotNova-Setup-0.2.0.exe` (instalação por usuário, não pede administrador).
+3. Para gravar vídeo é preciso o **ffmpeg**. Na primeira gravação o ShotNova oferece instalar pelo winget (`winget install Gyan.FFmpeg`). Também funciona com o `ffmpeg.exe` ao lado do `ShotNova.exe` ou no `PATH`.
+
+O ffmpeg é usado como programa separado, só para codificar o vídeo; ele não vem dentro do ShotNova.
 
 No Windows 11, as entradas do menu de contexto aparecem em **Mostrar mais opções**.
 
@@ -33,6 +48,7 @@ No Windows 11, as entradas do menu de contexto aparecem em **Mostrar mais opçõ
 | Desfazer anotação | `Ctrl+Z` |
 | Cancelar | `Esc` |
 | Desfazer a seleção | botão direito |
+| Gravar vídeo da área selecionada | botão ● da barra |
 
 ## Compilar
 
@@ -51,11 +67,11 @@ powershell -File tools\make-icon.ps1
 
 ## Configurações
 
-Ficam em `%APPDATA%\ShotNova\settings.json` (atalho, última pasta e contador do `screenshot_N`).
+Ficam em `%APPDATA%\ShotNova\settings.json` (atalho, última pasta e contadores de `screenshot_N` e `video_N`).
 
 ## Planejado
 
-- Gravação de vídeo (tela inteira, uma janela ou uma área).
+- Áudio na gravação de vídeo (sistema e microfone).
 
 ## Licença
 

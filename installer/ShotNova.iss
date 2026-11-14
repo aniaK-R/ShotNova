@@ -1,6 +1,6 @@
 ; Instalador do ShotNova (Inno Setup 6). Compile com: tools\build-installer.ps1
 #define MyAppName "ShotNova"
-#define MyAppVersion "0.1.0"
+#define MyAppVersion "0.2.0"
 #define MyAppExe "ShotNova.exe"
 
 [Setup]

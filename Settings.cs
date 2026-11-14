@@ -41,6 +41,35 @@ public sealed class Settings
         return $"screenshot_{max + 1}.png";
     }
 
+    /// <summary>Maior número já usado em nomes "video_N".</summary>
+    public int LastVideoNumber { get; set; }
+
+    /// <summary>Próximo nome livre para vídeo: video_N.mp4.</summary>
+    public string NextVideoName(string folder)
+    {
+        var max = LastVideoNumber;
+        try
+        {
+            foreach (var f in Directory.EnumerateFiles(folder, "video_*"))
+            {
+                var m = System.Text.RegularExpressions.Regex.Match(Path.GetFileNameWithoutExtension(f), @"^video_(\d+)$");
+                if (m.Success && int.TryParse(m.Groups[1].Value, out var n) && n > max) max = n;
+            }
+        }
+        catch { }
+        return $"video_{max + 1}.mp4";
+    }
+
+    public void RememberVideo(string filePath)
+    {
+        var m = System.Text.RegularExpressions.Regex.Match(Path.GetFileNameWithoutExtension(filePath), @"^video_(\d+)$");
+        if (m.Success && int.TryParse(m.Groups[1].Value, out var n) && n > LastVideoNumber)
+        {
+            LastVideoNumber = n;
+            try { Save(); } catch { }
+        }
+    }
+
     /// <summary>Guarda a pasta e, se o nome for screenshot_N, o número usado.</summary>
     public void RememberSave(string filePath)
     {

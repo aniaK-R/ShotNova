@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Threading;
+using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Interop;
 using Microsoft.Win32;
@@ -23,6 +24,12 @@ public partial class App : System.Windows.Application
     private Forms.NotifyIcon? _tray;
     private HwndSource? _hotkeyWindow;
     private bool _capturing;
+
+    private ScreenRecorder? _rec;
+    private RecorderUi? _recUi;
+    private string? _lastVideo;
+    private Forms.ToolStripItem? _stopItem;
+    private readonly System.Collections.Generic.List<Forms.ToolStripItem> _recItems = new();
 
     protected override void OnStartup(StartupEventArgs e)
     {
@@ -103,7 +110,10 @@ public partial class App : System.Windows.Application
 
     private void UpdateTrayText()
     {
-        if (_tray is not null) _tray.Text = "ShotNova (" + _settings.HotkeyText + ")";
+        if (_tray is not null)
+            _tray.Text = _rec is not null
+                ? "ShotNova ● gravando (" + _settings.HotkeyText + " para parar)"
+                : "ShotNova (" + _settings.HotkeyText + ")";
     }
 
     /// <summary>Troca o atalho. Devolve null se deu certo, ou o motivo da falha (o atalho antigo é mantido).</summary>
@@ -145,14 +155,27 @@ public partial class App : System.Windows.Application
         menu.Items.Add("Capturar área", null, (_, _) => Dispatcher.BeginInvoke(new Action(StartCapture)));
         menu.Items.Add("Abrir imagem…", null, (_, _) => Dispatcher.BeginInvoke(new Action(OpenImage)));
         menu.Items.Add(new Forms.ToolStripSeparator());
+        _recItems.Add(menu.Items.Add("Gravar tela inteira", null, (_, _) => Dispatcher.BeginInvoke(new Action(RecordScreen))));
+        _recItems.Add(menu.Items.Add("Gravar janela…", null, (_, _) => Dispatcher.BeginInvoke(new Action(RecordWindow))));
+        _recItems.Add(menu.Items.Add("Gravar área…", null, (_, _) => Dispatcher.BeginInvoke(new Action(RecordArea))));
+        _stopItem = menu.Items.Add("■ Parar gravação", null, (_, _) => Dispatcher.BeginInvoke(new Action(StopRecording)));
+        _stopItem.Visible = false;
+        menu.Items.Add(new Forms.ToolStripSeparator());
         menu.Items.Add("Abrir pasta de capturas", null, (_, _) => OpenFolder(Paths.Captures));
         menu.Items.Add("Abrir pasta do histórico", null, (_, _) => OpenFolder(Paths.History));
+        menu.Items.Add("Abrir pasta de vídeos", null, (_, _) => OpenFolder(Paths.Videos));
         menu.Items.Add(new Forms.ToolStripSeparator());
         menu.Items.Add("Configurações (atalho)…", null, (_, _) => Dispatcher.BeginInvoke(new Action(OpenSettings)));
         var shellItem = new Forms.ToolStripMenuItem("Integrar ao menu de contexto do Windows") { CheckOnClick = false };
         shellItem.Click += (_, _) => ToggleShellIntegration();
         menu.Items.Add(shellItem);
-        menu.Opening += (_, _) => shellItem.Checked = ShellIntegrationInstalled();
+        menu.Opening += (_, _) =>
+        {
+            shellItem.Checked = ShellIntegrationInstalled();
+            var recording = _rec is not null;
+            if (_stopItem is not null) _stopItem.Visible = recording;
+            foreach (var i in _recItems) i.Enabled = !recording;
+        };
         menu.Items.Add(new Forms.ToolStripSeparator());
         menu.Items.Add("Sair", null, (_, _) => Dispatcher.BeginInvoke(new Action(Shutdown)));
 
@@ -162,6 +185,13 @@ public partial class App : System.Windows.Application
             Text = "ShotNova",
             Visible = true,
             ContextMenuStrip = menu
+        };
+        _tray.BalloonTipClicked += (_, _) =>
+        {
+            var v = _lastVideo;
+            _lastVideo = null;
+            if (v is not null && File.Exists(v))
+                Process.Start(new ProcessStartInfo("explorer.exe", $"/select,\"{v}\"") { UseShellExecute = true });
         };
         _tray.MouseClick += (_, ev) =>
         {
@@ -222,15 +252,24 @@ public partial class App : System.Windows.Application
 
     // ---------- captura ----------
 
-    private void StartCapture()
+    private void StartCapture() => StartCaptureCore(false);
+
+    private void StartCaptureCore(bool recordFirst)
     {
+        // o atalho de captura também PÁRA uma gravação em andamento
+        if (_rec is not null) { StopRecording(); return; }
         if (_capturing) return;
         _capturing = true;
         try
         {
             var shot = ScreenGrabber.GrabVirtualScreen(out var vs);
-            var win = new CaptureWindow(shot, vs);
+            var win = new CaptureWindow(shot, vs, recordFirst);
             win.Info += msg => _tray?.ShowBalloonTip(1800, "ShotNova", msg, Forms.ToolTipIcon.Info);
+            win.RecordRequested += async rect =>
+            {
+                await Task.Delay(500); // deixa o overlay sumir antes de começar
+                BeginRecording(() => rect, rect);
+            };
             win.Closed += (_, _) => _capturing = false;
             win.Show();
         }
@@ -238,6 +277,118 @@ public partial class App : System.Windows.Application
         {
             _capturing = false;
             _tray?.ShowBalloonTip(4000, "ShotNova", "Falha na captura: " + ex.Message, Forms.ToolTipIcon.Error);
+        }
+    }
+
+    // ---------- gravação de vídeo ----------
+
+    private void RecordArea() => StartCaptureCore(true);
+
+    private async void RecordScreen()
+    {
+        if (_rec is not null || _capturing) return;
+        var b = Forms.Screen.FromPoint(Forms.Cursor.Position).Bounds; // monitor onde está o cursor
+        await Task.Delay(500);
+        BeginRecording(() => b, b);
+    }
+
+    private void RecordWindow()
+    {
+        if (_rec is not null || _capturing) return;
+        _capturing = true;
+        var picker = new WindowPicker(Forms.SystemInformation.VirtualScreen);
+        picker.Closed += (_, _) => _capturing = false;
+        picker.Picked += async (hwnd, bounds) =>
+        {
+            await Task.Delay(500);
+            var last = bounds;
+            // acompanha a janela se ela for movida durante a gravação
+            BeginRecording(() =>
+            {
+                if (Win.IsWindow(hwnd) && !Win.IsIconic(hwnd) && Win.TryFrameBounds(hwnd, out var r)) last = r;
+                return last;
+            }, bounds);
+        };
+        picker.Show();
+    }
+
+    private void BeginRecording(Func<Drawing.Rectangle> region, Drawing.Rectangle initial)
+    {
+        if (_rec is not null) return;
+
+        var ffmpeg = ScreenRecorder.FindFfmpeg();
+        if (ffmpeg is null) { OfferFfmpegInstall(); return; }
+
+        // H.264 em yuv420p exige largura e altura pares
+        var w = initial.Width & ~1;
+        var h = initial.Height & ~1;
+        if (w < 16 || h < 16)
+        {
+            _tray?.ShowBalloonTip(3000, "ShotNova", "A área é pequena demais para gravar.", Forms.ToolTipIcon.Warning);
+            return;
+        }
+
+        var st = Settings.Load();
+        Directory.CreateDirectory(Paths.Videos);
+        var path = Path.Combine(Paths.Videos, st.NextVideoName(Paths.Videos));
+
+        var rec = new ScreenRecorder(region, new Drawing.Size(w, h), path);
+        try
+        {
+            rec.Start(ffmpeg);
+        }
+        catch (Exception ex)
+        {
+            _tray?.ShowBalloonTip(4000, "ShotNova", "Não foi possível iniciar a gravação: " + ex.Message, Forms.ToolTipIcon.Error);
+            return;
+        }
+
+        _rec = rec;
+        _recUi = new RecorderUi(region);
+        _recUi.StopRequested += StopRecording;
+        UpdateTrayText();
+    }
+
+    private async void StopRecording()
+    {
+        var rec = _rec;
+        if (rec is null) return;
+        _rec = null;
+        _recUi?.Dispose();
+        _recUi = null;
+        UpdateTrayText();
+        _tray?.ShowBalloonTip(1500, "ShotNova", "Finalizando o vídeo…", Forms.ToolTipIcon.Info);
+
+        var error = await Task.Run(rec.Stop);
+        if (error is null)
+        {
+            Settings.Load().RememberVideo(rec.Output);
+            _lastVideo = rec.Output;
+            _tray?.ShowBalloonTip(4000, "ShotNova", $"Vídeo salvo: {Path.GetFileName(rec.Output)} (clique para abrir a pasta)", Forms.ToolTipIcon.Info);
+        }
+        else
+        {
+            MessageBox.Show("A gravação falhou:\n\n" + error, "ShotNova", MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+    }
+
+    private void OfferFfmpegInstall()
+    {
+        var answer = MessageBox.Show(
+            "Para gravar vídeo, o ShotNova usa o ffmpeg, que não foi encontrado neste computador.\n\n" +
+            "Instalar agora pelo winget (Gyan.FFmpeg)? Uma janela de terminal vai mostrar o andamento.\n\n" +
+            "Depois que terminar, é só gravar de novo. Também dá para colocar o ffmpeg.exe ao lado do ShotNova.exe.",
+            "ShotNova - ffmpeg necessário", MessageBoxButton.YesNo, MessageBoxImage.Question);
+        if (answer != MessageBoxResult.Yes) return;
+        try
+        {
+            Process.Start(new ProcessStartInfo("winget",
+                "install --id Gyan.FFmpeg --exact --accept-package-agreements --accept-source-agreements")
+            { UseShellExecute = true });
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show("Não foi possível chamar o winget: " + ex.Message, "ShotNova");
         }
     }
 

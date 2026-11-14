@@ -78,8 +78,14 @@ public sealed class CaptureWindow : Window
 
     public event Action<string>? Info;
 
-    public CaptureWindow(BitmapSource shot, System.Drawing.Rectangle virtualScreen)
+    /// <summary>Pedido para gravar vídeo da área selecionada (retângulo em coordenadas de tela, pixels físicos).</summary>
+    public event Action<System.Drawing.Rectangle>? RecordRequested;
+
+    private readonly bool _recordFirst;
+
+    public CaptureWindow(BitmapSource shot, System.Drawing.Rectangle virtualScreen, bool recordFirst = false)
     {
+        _recordFirst = recordFirst;
         _shot = shot;
         _vs = virtualScreen;
 
@@ -130,7 +136,9 @@ public sealed class CaptureWindow : Window
             IsHitTestVisible = false,
             Child = new TextBlock
             {
-                Text = "Arraste para selecionar a área  •  Esc cancela",
+                Text = recordFirst
+                    ? "Arraste para selecionar a área e clique em Gravar (●)  •  Esc cancela"
+                    : "Arraste para selecionar a área  •  Esc cancela",
                 Foreground = Brushes.White,
                 FontSize = 14
             }
@@ -213,6 +221,7 @@ public sealed class CaptureWindow : Window
         _ui.Children.Add(_tools);
 
         var h = new StackPanel { Orientation = Orientation.Horizontal };
+        h.Children.Add(ActionButton("M12,4 A8,8 0 1 0 12,20 A8,8 0 1 0 12,4 M12,9 A3,3 0 1 0 12,15 A3,3 0 1 0 12,9", "Gravar vídeo desta área", DoRecord, primary: _recordFirst));
         h.Children.Add(ActionButton("M12,3 A9,9 0 1 0 12,21 A9,9 0 1 0 12,3 M12,7 L12,12 L16,14", "Guardar no histórico (Ctrl+H)", DoHistory));
         h.Children.Add(ActionButton("M5,4 L16,4 L20,8 L20,20 L5,20 Z M8,4 L8,9 L15,9 L15,4 M8,20 L8,14 L17,14 L17,20", "Salvar como… (Ctrl+S)", DoSave));
         h.Children.Add(ActionButton("M8,8 L20,8 L20,21 L8,21 Z M16,8 L16,4 L4,4 L4,17 L8,17", "Copiar (Ctrl+C ou Enter)", DoCopy, primary: true));
@@ -798,6 +807,19 @@ public sealed class CaptureWindow : Window
         {
             MessageBox.Show(this, "Não foi possível salvar: " + ex.Message, "ShotNova");
         }
+    }
+
+    private void DoRecord()
+    {
+        if (!_hasSel) return;
+        CommitText();
+        var x = (int)Math.Round(_sel.X);
+        var y = (int)Math.Round(_sel.Y);
+        var w = (int)Math.Round(_sel.Width);
+        var hgt = (int)Math.Round(_sel.Height);
+        var rect = new System.Drawing.Rectangle(_vs.X + x, _vs.Y + y, w, hgt);
+        Close();
+        RecordRequested?.Invoke(rect);
     }
 
     private void DoHistory()

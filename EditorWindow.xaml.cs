@@ -362,4 +362,6 @@ internal static class Paths
     public static string Captures => System.IO.Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.MyPictures), "ShotNova");
     public static string History => System.IO.Path.Combine(Captures, "Historico");
+    public static string Videos => System.IO.Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.MyVideos), "ShotNova");
 }
