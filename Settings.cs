@@ -41,6 +41,12 @@ public sealed class Settings
         return $"screenshot_{max + 1}.png";
     }
 
+    /// <summary>Gravar o som do computador junto com o vídeo.</summary>
+    public bool RecordSystemAudio { get; set; } = true;
+
+    /// <summary>Gravar o microfone padrão junto com o vídeo.</summary>
+    public bool RecordMic { get; set; } = false;
+
     /// <summary>Maior número já usado em nomes "video_N".</summary>
     public int LastVideoNumber { get; set; }
 

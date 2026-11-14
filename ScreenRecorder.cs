@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.Drawing;
 using System.Drawing.Imaging;
 using System.IO;
+using System.IO.Pipes;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading;
@@ -20,18 +21,23 @@ public sealed class ScreenRecorder
     private readonly Func<Rectangle> _region;
     private readonly Size _size;
     private readonly StringBuilder _log = new();
+    private readonly AudioMixer? _audio;
+    private readonly Stopwatch _clock = new();   // relógio comum a vídeo e áudio (mantém a sincronia)
     private Process? _ff;
     private Thread? _thread;
+    private Thread? _audioThread;
+    private NamedPipeServerStream? _pipe;
     private volatile bool _stop;
     private volatile string? _loopError;
 
     public string Output { get; }
 
-    public ScreenRecorder(Func<Rectangle> region, Size size, string output)
+    public ScreenRecorder(Func<Rectangle> region, Size size, string output, AudioMixer? audio = null)
     {
         _region = region;
         _size = size;
         Output = output;
+        _audio = audio;
     }
 
     /// <summary>Procura o ffmpeg ao lado do app, no PATH (atual, do usuário e do sistema) e no atalho do winget.</summary>
@@ -75,14 +81,32 @@ public sealed class ScreenRecorder
             RedirectStandardInput = true,
             RedirectStandardError = true
         };
-        foreach (var a in new[]
+        var args = new System.Collections.Generic.List<string>
         {
             "-y", "-hide_banner", "-loglevel", "error",
+            "-thread_queue_size", "512",
             "-f", "rawvideo", "-pix_fmt", "bgr0", "-video_size", $"{_size.Width}x{_size.Height}",
-            "-framerate", Fps.ToString(), "-i", "-",
-            "-c:v", "libx264", "-preset", "veryfast", "-crf", "23", "-pix_fmt", "yuv420p",
-            "-movflags", "+faststart", Output
-        }) psi.ArgumentList.Add(a);
+            "-framerate", Fps.ToString(), "-i", "-"
+        };
+
+        var withAudio = _audio is { HasSources: true };
+        if (withAudio)
+        {
+            var name = "shotnova_audio_" + Guid.NewGuid().ToString("N");
+            _pipe = new NamedPipeServerStream(name, PipeDirection.Out, 1, PipeTransmissionMode.Byte);
+            args.AddRange(new[]
+            {
+                "-thread_queue_size", "512",
+                "-f", "s16le", "-ar", AudioMixer.Rate.ToString(), "-ac", AudioMixer.Channels.ToString(),
+                "-i", @"\\.\pipe\" + name,
+                "-map", "0:v:0", "-map", "1:a:0"
+            });
+        }
+
+        args.AddRange(new[] { "-c:v", "libx264", "-preset", "veryfast", "-crf", "23", "-pix_fmt", "yuv420p" });
+        if (withAudio) args.AddRange(new[] { "-c:a", "aac", "-b:a", "160k" });
+        args.AddRange(new[] { "-movflags", "+faststart", Output });
+        foreach (var a in args) psi.ArgumentList.Add(a);
 
         _ff = Process.Start(psi) ?? throw new InvalidOperationException("Não foi possível iniciar o ffmpeg.");
         _ff.ErrorDataReceived += (_, e) =>
@@ -92,8 +116,29 @@ public sealed class ScreenRecorder
         };
         _ff.BeginErrorReadLine();
 
+        _clock.Restart();
         _thread = new Thread(Loop) { IsBackground = true, Name = "ShotNova.Recorder" };
         _thread.Start();
+
+        if (withAudio)
+        {
+            // o ffmpeg só abre o canal de áudio depois de sondar o vídeo; por isso o áudio roda em outra thread
+            _audioThread = new Thread(AudioLoop) { IsBackground = true, Name = "ShotNova.Audio" };
+            _audioThread.Start();
+        }
+    }
+
+    private void AudioLoop()
+    {
+        try
+        {
+            _pipe!.WaitForConnection();
+            _audio!.Pump(_pipe, _clock, () => _stop);
+        }
+        catch (Exception ex)
+        {
+            if (!_stop) _loopError = "Falha no áudio: " + ex.Message;
+        }
     }
 
     /// <summary>Encerra a gravação e finaliza o arquivo. Devolve null se deu certo, ou o motivo da falha.</summary>
@@ -101,6 +146,9 @@ public sealed class ScreenRecorder
     {
         _stop = true;
         _thread?.Join(5000);
+        _audioThread?.Join(3000);
+        try { _pipe?.Dispose(); } catch { }   // fecha o canal: o ffmpeg vê o fim do áudio
+        try { _audio?.Dispose(); } catch { }
         try { _ff?.StandardInput.Close(); } catch { }
         if (_ff is not null && !_ff.WaitForExit(30000))
         {
@@ -125,7 +173,7 @@ public sealed class ScreenRecorder
             using var g = Graphics.FromImage(bmp);
             var buf = new byte[w * h * 4];
             var pipe = _ff!.StandardInput.BaseStream;
-            var sw = Stopwatch.StartNew();
+            var sw = _clock;
             long written = 0;
 
             while (!_stop)
